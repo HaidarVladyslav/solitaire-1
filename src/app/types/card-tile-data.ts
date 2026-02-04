@@ -5,6 +5,7 @@ export type CardTileData = {
   // allowedRanksToBePlacedOn: CardTileRank[];
   isRed: boolean;
   canBePlacedOnEmpty: boolean;
+  priority: number
 };
 
 // export enum CardTileName {

@@ -37,5 +37,6 @@ export function getCardDataFromSprite(row: number, col: number): CardTileData {
     suit,
     isRed,
     canBePlacedOnEmpty,
+    priority: col,
   };
 }
