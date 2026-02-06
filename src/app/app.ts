@@ -98,7 +98,7 @@ export class App {
       const cardWidth = GAME_CONFIG.cardWidth;
       const cardHeight = GAME_CONFIG.cardHeight;
       const gap = 40;
-      const Y_SHIFT_FOR_PLAYING_CARDS = (cardHeight * 3) / 7;
+      const Y_SHIFT_FOR_PLAYING_CARDS = (cardHeight * 2) / 7;
 
       const cols = GAME_CONFIG.cols;
       const rows = GAME_CONFIG.rows;
@@ -304,7 +304,7 @@ export class App {
 
       function drawPlayingCardsPlaceholders() {
         const centerOfScreen = app.screen.width / 2;
-        const y = 40 * 3 + cardHeight;
+        const y = 40 * 2 + cardHeight;
         return Object.entries(playingZoneCards).reduce(
           (acc, cur, index, array) => {
             const x = getEmptyPlaceholderXPosition(
@@ -324,7 +324,7 @@ export class App {
       }
 
       function drawDeckCardsPlaceholders() {
-        const screenX = 100;
+        const screenX = 116;
         const y = 40;
         return Object.entries(deck).reduce(
           (acc, cur, index, array) => {
@@ -335,16 +335,20 @@ export class App {
               .stroke({ color: 0x000000 });
             rect.eventMode = 'static';
             rect.on('pointerdown', (e) => {
+              if (deck.nonTurned.length) {
+                return;
+              }
               deck.nonTurned = deck.turned.reverse().splice(0);
               deck.nonTurned.forEach((nonTurnedCard, index) => {
-                nonTurnedCard.turnCard();
                 nonTurnedCard.updateCoordinates(
                   placeholdersDeckItems.nonTurned.x + cardWidth / 2,
                   placeholdersDeckItems.nonTurned.y + cardHeight / 2,
                 );
                 nonTurnedCard.setSpritePosition();
-                nonTurnedCard.card.sprite.zIndex = index;
+                nonTurnedCard.card.sprite.zIndex = index + 1;
+                nonTurnedCard.turnCard();
               });
+              deck.turned = [];
             });
             app.stage.addChild(rect);
             const key = cur[0] as keyof typeof deck;
@@ -359,15 +363,13 @@ export class App {
         const rank = card.card.state.rank;
         const suit = card.card.state.suit;
         const priority = card.card.state.priority;
-
-        // if (
-        //   Object.values(readyCards).some((cards) =>
-        //     cards.some((readyCard) => readyCard.card.sprite.uid === card.card.sprite.uid),
-        //   )
-        // ) {
-        //   return;
-        // }
-        console.log(card);
+        if (
+          Object.values(readyCards).some((cards) =>
+            cards.some((readyCard) => readyCard.card.sprite.uid === card.card.sprite.uid),
+          )
+        ) {
+          return;
+        }
 
         if (card.isShownBackCard) {
           if (
@@ -402,10 +404,6 @@ export class App {
           (turnedCard) => turnedCard.card.sprite.uid === card.card.sprite.uid,
         );
 
-        if (indexInTurnedCards !== -1) {
-          deck.turned.splice(indexInTurnedCards, 1);
-        }
-
         if (rank === 'ace') {
           const x = placeholdersReadyItems[suit].x + cardWidth / 2;
           const y = placeholdersReadyItems[suit].y + cardHeight / 2;
@@ -415,6 +413,11 @@ export class App {
           const itemInPlayingCards = Object.entries(playingZoneCards).find(([key, value]) =>
             value.find((playingCard) => playingCard.card.sprite.uid === card.card.sprite.uid),
           );
+
+          if (indexInTurnedCards !== -1) {
+            deck.turned.splice(indexInTurnedCards, 1);
+          }
+
           if (itemInPlayingCards) {
             const indexInPlayingCardsCol = playingZoneCards[+itemInPlayingCards[0]].findIndex(
               (playingCard) => playingCard.card.sprite.uid === card.card.sprite.uid,
@@ -445,14 +448,30 @@ export class App {
                 return value.find((item) => item.card.sprite.uid === card.card.sprite.uid);
               },
             );
+
+            const itemIndexToBeRemovedFromTurnedDeck = deck.turned.findIndex((item) => {
+              return item.card.sprite.uid === card.card.sprite.uid;
+            });
+
+            if (itemIndexToBeRemovedFromTurnedDeck !== -1) {
+              card.card.sprite.zIndex = (readyCards[suit].at(-1)?.card.sprite.zIndex || 0) + 1;
+              deck.turned.splice(itemIndexToBeRemovedFromTurnedDeck, 1);
+              readyCards[suit].push(card);
+              card.setNewCoordindatesSlowly(x, y);
+              return;
+            }
+
             if (itemToBeRemovedFromPlayingZone) {
               const indexOfCurrentCard = itemToBeRemovedFromPlayingZone[1].findIndex(
                 (item) => item.card.sprite.uid === card.card.sprite.uid,
               );
               if (indexOfCurrentCard !== -1) {
-                playingZoneCards[1].splice(indexOfCurrentCard, 1);
-              }
-              if (indexOfCurrentCard !== -1 && indexOfCurrentCard !== 0) {
+                playingZoneCards[+itemToBeRemovedFromPlayingZone[0]].splice(indexOfCurrentCard, 1);
+                card.card.sprite.zIndex = (readyCards[suit].at(-1)?.card.sprite.zIndex || 0) + 1;
+                readyCards[suit].push(card);
+
+                card.setNewCoordindatesSlowly(x, y);
+
                 const preLastElement = playingZoneCards[+itemToBeRemovedFromPlayingZone[0]].at(-1);
                 if (preLastElement && preLastElement.isShownBackCard) {
                   preLastElement.turnCard();
@@ -460,10 +479,6 @@ export class App {
               }
             }
 
-            card.card.sprite.zIndex = (readyCards[suit].at(-1)?.card.sprite.zIndex || 0) + 1;
-            readyCards[suit].push(card);
-
-            card.setNewCoordindatesSlowly(x, y);
             return;
           }
 
@@ -493,16 +508,19 @@ export class App {
             card.card.sprite.zIndex = zIndexToSet;
             playingZoneCards[playingZoneCardsIndexToBeSet].push(card);
 
+            const indexOfCurrentCardInTurnedDeck = deck.turned.findIndex(
+              (turnedCard) => turnedCard.card.sprite.uid === card.card.sprite.uid,
+            );
+
+            if (indexOfCurrentCardInTurnedDeck !== -1) {
+              deck.turned.splice(indexOfCurrentCardInTurnedDeck, 1);
+            }
+
             if (isKingInPlayingZone) {
               const indexOfCurrentCardToBeRemoved = playingZoneCards[
                 +isKingInPlayingZone[0]
               ].findIndex((existingCard) => existingCard.card.sprite.uid === card.card.sprite.uid);
-              const indexOfCurrentCardInTurnedDeck = deck.turned.findIndex(
-                (turnedCard) => turnedCard.card.sprite.uid === card.card.sprite.uid,
-              );
-              if (indexOfCurrentCardInTurnedDeck !== -1) {
-                deck.turned.splice(indexOfCurrentCardInTurnedDeck, 1);
-              }
+
               if (indexOfCurrentCardToBeRemoved !== -1) {
                 playingZoneCards[+isKingInPlayingZone[0]].forEach((existingCard, index) => {
                   if (index > indexOfCurrentCardToBeRemoved) {
@@ -525,7 +543,6 @@ export class App {
             }
             return;
           }
-
           const foundElement = Object.entries(playingZoneCards).find(([key, value]) => {
             if (value.length === 0) {
               return false;
@@ -538,7 +555,6 @@ export class App {
               card.card.state.priority === lastValue.card.state.priority - 1
             );
           });
-
           if (foundElement) {
             const isFoundCardInPlayingZone = Object.entries(playingZoneCards).find(
               ([key, value]) => {
@@ -549,7 +565,6 @@ export class App {
                 );
               },
             );
-
             const x = placeholdersPlayingItems[+foundElement[0]].x + cardWidth / 2;
             const y =
               placeholdersPlayingItems[+foundElement[0]].y +
@@ -560,6 +575,10 @@ export class App {
             card.card.sprite.zIndex =
               (playingZoneCards[+foundElement[0]].at(-1)?.card?.sprite?.zIndex || 0) + 1;
             playingZoneCards[+foundElement[0]].push(card);
+
+            if (indexInTurnedCards !== -1) {
+              deck.turned.splice(indexInTurnedCards, 1);
+            }
 
             if (isFoundCardInPlayingZone) {
               const indexOfCurrentCardToBeRemoved = playingZoneCards[
@@ -637,17 +656,16 @@ export class App {
           if (index < playingZoneCardsLength) {
             return;
           }
-          card.card.sprite.zIndex = array.length - index + 1;
           card.updateCoordinates(
             placeholdersDeckItems.nonTurned.x + cardWidth / 2,
             placeholdersDeckItems.nonTurned.y + cardHeight / 2,
           );
           card.setSpritePosition();
           card.turnCard();
+          card.card.sprite.zIndex = array.length - index + 1;
           deck.nonTurned.push(card);
         });
       }
-
       shuffle();
 
       // Listen for animate update
