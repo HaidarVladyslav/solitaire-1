@@ -98,7 +98,7 @@ export class App {
       const cardWidth = GAME_CONFIG.cardWidth;
       const cardHeight = GAME_CONFIG.cardHeight;
       const gap = 40;
-      const Y_SHIFT_FOR_PLAYING_CARDS = (cardHeight * 2) / 7;
+      const Y_SHIFT_FOR_PLAYING_CARDS = (cardHeight * 4) / 7;
 
       const cols = GAME_CONFIG.cols;
       const rows = GAME_CONFIG.rows;
@@ -465,7 +465,7 @@ export class App {
               const indexOfCurrentCard = itemToBeRemovedFromPlayingZone[1].findIndex(
                 (item) => item.card.sprite.uid === card.card.sprite.uid,
               );
-              if (indexOfCurrentCard !== -1) {
+              if (indexOfCurrentCard === itemToBeRemovedFromPlayingZone[1].length - 1) {
                 playingZoneCards[+itemToBeRemovedFromPlayingZone[0]].splice(indexOfCurrentCard, 1);
                 card.card.sprite.zIndex = (readyCards[suit].at(-1)?.card.sprite.zIndex || 0) + 1;
                 readyCards[suit].push(card);
