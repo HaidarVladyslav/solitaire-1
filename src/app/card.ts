@@ -4,6 +4,7 @@ import { CardTileData } from './types/card-tile-data';
 export class BaseCard {
   card: { sprite: Sprite };
   cardTexture: Texture;
+  initialCardTexture: Texture;
   rectangleFrame: Rectangle;
   isShaking: boolean = false;
   x: number;
@@ -27,15 +28,16 @@ export class BaseCard {
     this.app = app;
     this.width = width;
     this.height = height;
-    this.rectangleFrame = new Rectangle(imageX, imageY, width, height);
     this.x = x;
     this.y = y;
     this.newX = x;
     this.newY = y;
+    this.rectangleFrame = new Rectangle(imageX, imageY, width, height);
     this.cardTexture = new Texture({
       frame: this.rectangleFrame,
       source,
     });
+    this.initialCardTexture = this.cardTexture;
     this.card = {
       sprite: new Sprite({
         texture: this.cardTexture,
@@ -43,10 +45,6 @@ export class BaseCard {
     };
 
     this.setSpritePosition();
-  }
-
-  flip() {
-    // this.card.ro
   }
 
   shake() {
@@ -77,8 +75,6 @@ export class BaseCard {
     this.card.sprite.y += this.card.sprite.height / 2;
     this.card.sprite.anchor.set(0.5);
     this.card.sprite.eventMode = 'static';
-
-    // this.card.sprite.on('pointerdown', () => console.log(this.card));
   }
 
   updateCoordinates(x: number, y: number) {
@@ -97,7 +93,7 @@ export class BaseCard {
     if (this.newX === this.x && this.newY === this.y) {
       return;
     }
-    const increment = 50;
+    const increment = 20;
     const minimalClosestIncrementValue = increment * 2;
     if (this.x - this.newX < 0) {
       this.card.sprite.x += increment;
@@ -137,6 +133,9 @@ export class BaseCard {
 }
 
 export class GameCard extends BaseCard {
+  backCard: BaseCard;
+  isShownBackCard: boolean = false;
+
   override card: { sprite: Sprite; state: CardTileData };
 
   constructor(
@@ -149,6 +148,7 @@ export class GameCard extends BaseCard {
     x: number,
     y: number,
     data: CardTileData,
+    backCard: BaseCard,
   ) {
     super(app, source, width, height, imageX, imageY, x, y);
     this.card = {
@@ -158,5 +158,17 @@ export class GameCard extends BaseCard {
       state: data,
     };
     this.setSpritePosition();
+    this.backCard = backCard;
+  }
+
+  turnCard() {
+    this.card.state.isBack = !this.card.state.isBack;
+    if (this.isShownBackCard) {
+      this.isShownBackCard = false;
+      this.card.sprite.texture = this.initialCardTexture;
+    } else {
+      this.isShownBackCard = true;
+      this.card.sprite.texture = this.backCard.cardTexture;
+    }
   }
 }

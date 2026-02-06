@@ -103,7 +103,7 @@ export class App {
       const cols = GAME_CONFIG.cols;
       const rows = GAME_CONFIG.rows;
 
-      const cards: GameCard[] = [];
+      let cards: GameCard[] = [];
 
       const readyCards: { [key in CardTileSuit]: GameCard[] } = {
         club: [],
@@ -111,7 +111,7 @@ export class App {
         heart: [],
         spade: [],
       };
-      const deck: GameCard[] = [];
+      const deck: { nonTurned: GameCard[]; turned: GameCard[] } = { nonTurned: [], turned: [] };
       const playingZoneCards: { [key: number]: GameCard[] } = {
         0: [],
         1: [],
@@ -127,6 +127,10 @@ export class App {
       const placeholdersPlayingItems: {
         [key: number]: { x: number; y: number };
       } = drawPlayingCardsPlaceholders();
+      const placeholdersDeckItems: {
+        turned: { x: number; y: number };
+        nonTurned: { x: number; y: number };
+      } = drawDeckCardsPlaceholders();
 
       // Rectangle for the first tile (top-left)
       // const tile1Rectangle = new Rectangle(0, 0, tileWidth, tileHeight);
@@ -158,29 +162,8 @@ export class App {
         for (let j = 0; j < rows; j++) {
           const x = cardWidth * j;
           const y = i * cardHeight;
-          const card = new GameCard(
-            app,
-            texture,
-            cardWidth,
-            cardHeight,
-            i * cardWidth,
-            j * cardHeight,
-            x,
-            y / 2,
-            getCardDataFromSprite(j, i),
-          );
 
           const isRed = j % 2 === 0;
-          //     const darkBackCard = new Card(
-          //   texture,
-          //   cardWidth,
-          //   cardHeight,
-          //   14 * cardWidth,
-          //   2 * cardHeight,
-          //   0,
-          //   4 * cardHeight,
-          //   false
-          // );
           const backCard = new BaseCard(
             app,
             texture,
@@ -191,6 +174,31 @@ export class App {
             x,
             y,
           );
+
+          const card = new GameCard(
+            app,
+            texture,
+            cardWidth,
+            cardHeight,
+            i * cardWidth,
+            j * cardHeight,
+            x,
+            y / 2,
+            getCardDataFromSprite(j, i),
+            backCard,
+          );
+
+          //     const darkBackCard = new Card(
+          //   texture,
+          //   cardWidth,
+          //   cardHeight,
+          //   14 * cardWidth,
+          //   2 * cardHeight,
+          //   0,
+          //   4 * cardHeight,
+          //   false
+          // );
+
           // backCard.card.anchor.set(0.5);
           // backCard.card.x += backCard.card.width / 2;
           // backCard.card.y += backCard.card.height / 2;
@@ -315,15 +323,112 @@ export class App {
         );
       }
 
+      function drawDeckCardsPlaceholders() {
+        const screenX = 100;
+        const y = 40;
+        return Object.entries(deck).reduce(
+          (acc, cur, index, array) => {
+            const x = getEmptyPlaceholderXPosition(index, screenX);
+            const rect = new Graphics()
+              .roundRect(x, y, cardWidth, cardHeight, 10)
+              .fill({ color: 'red' })
+              .stroke({ color: 0x000000 });
+            rect.eventMode = 'static';
+            rect.on('pointerdown', (e) => {
+              deck.nonTurned = deck.turned.reverse().splice(0);
+              deck.nonTurned.forEach((nonTurnedCard, index) => {
+                nonTurnedCard.turnCard();
+                nonTurnedCard.updateCoordinates(
+                  placeholdersDeckItems.nonTurned.x + cardWidth / 2,
+                  placeholdersDeckItems.nonTurned.y + cardHeight / 2,
+                );
+                nonTurnedCard.setSpritePosition();
+                nonTurnedCard.card.sprite.zIndex = index;
+              });
+            });
+            app.stage.addChild(rect);
+            const key = cur[0] as keyof typeof deck;
+            acc[key] = { x, y };
+            return acc;
+          },
+          {} as { turned: { x: number; y: number }; nonTurned: { x: number; y: number } },
+        );
+      }
+
       function moveCardToAllowedPosition(card: GameCard) {
         const rank = card.card.state.rank;
         const suit = card.card.state.suit;
         const priority = card.card.state.priority;
+
+        // if (
+        //   Object.values(readyCards).some((cards) =>
+        //     cards.some((readyCard) => readyCard.card.sprite.uid === card.card.sprite.uid),
+        //   )
+        // ) {
+        //   return;
+        // }
+        console.log(card);
+
+        if (card.isShownBackCard) {
+          if (
+            !deck.nonTurned.some(
+              (nonTurnedCard) => nonTurnedCard.card.sprite.uid === card.card.sprite.uid,
+            )
+          ) {
+            return;
+          }
+          card.turnCard();
+          card.updateCoordinates(
+            placeholdersDeckItems.turned.x + cardWidth / 2,
+            placeholdersDeckItems.turned.y + cardHeight / 2,
+          );
+          card.card.sprite.zIndex = 0;
+          card.setSpritePosition();
+          const indexInNonTurnedCards = deck.nonTurned.findIndex(
+            (nonTurnedCard) => nonTurnedCard.card.sprite.uid === card.card.sprite.uid,
+          );
+          if (indexInNonTurnedCards !== -1) {
+            if (deck.turned.length) {
+              card.card.sprite.zIndex = (deck.turned.at(-1)?.card.sprite.zIndex || 0) + 1;
+            }
+            deck.nonTurned.splice(indexInNonTurnedCards, 1);
+            deck.turned.push(card);
+          }
+
+          return;
+        }
+
+        const indexInTurnedCards = deck.turned.findIndex(
+          (turnedCard) => turnedCard.card.sprite.uid === card.card.sprite.uid,
+        );
+
+        if (indexInTurnedCards !== -1) {
+          deck.turned.splice(indexInTurnedCards, 1);
+        }
+
         if (rank === 'ace') {
           const x = placeholdersReadyItems[suit].x + cardWidth / 2;
           const y = placeholdersReadyItems[suit].y + cardHeight / 2;
           readyCards[suit].push(card);
           card.setNewCoordindatesSlowly(x, y);
+
+          const itemInPlayingCards = Object.entries(playingZoneCards).find(([key, value]) =>
+            value.find((playingCard) => playingCard.card.sprite.uid === card.card.sprite.uid),
+          );
+          if (itemInPlayingCards) {
+            const indexInPlayingCardsCol = playingZoneCards[+itemInPlayingCards[0]].findIndex(
+              (playingCard) => playingCard.card.sprite.uid === card.card.sprite.uid,
+            );
+            if (indexInPlayingCardsCol !== -1) {
+              playingZoneCards[+itemInPlayingCards[0]].splice(indexInPlayingCardsCol, 1);
+            }
+            if (indexInPlayingCardsCol !== 0 && indexInPlayingCardsCol !== -1) {
+              const preLastElement = playingZoneCards[+itemInPlayingCards[0]].at(-1);
+              if (preLastElement && preLastElement.isShownBackCard) {
+                preLastElement.turnCard();
+              }
+            }
+          }
         } else {
           if (
             readyCards[suit].length &&
@@ -345,7 +450,13 @@ export class App {
                 (item) => item.card.sprite.uid === card.card.sprite.uid,
               );
               if (indexOfCurrentCard !== -1) {
-                itemToBeRemovedFromPlayingZone[1].splice(indexOfCurrentCard, 1);
+                playingZoneCards[1].splice(indexOfCurrentCard, 1);
+              }
+              if (indexOfCurrentCard !== -1 && indexOfCurrentCard !== 0) {
+                const preLastElement = playingZoneCards[+itemToBeRemovedFromPlayingZone[0]].at(-1);
+                if (preLastElement && preLastElement.isShownBackCard) {
+                  preLastElement.turnCard();
+                }
               }
             }
 
@@ -386,6 +497,12 @@ export class App {
               const indexOfCurrentCardToBeRemoved = playingZoneCards[
                 +isKingInPlayingZone[0]
               ].findIndex((existingCard) => existingCard.card.sprite.uid === card.card.sprite.uid);
+              const indexOfCurrentCardInTurnedDeck = deck.turned.findIndex(
+                (turnedCard) => turnedCard.card.sprite.uid === card.card.sprite.uid,
+              );
+              if (indexOfCurrentCardInTurnedDeck !== -1) {
+                deck.turned.splice(indexOfCurrentCardInTurnedDeck, 1);
+              }
               if (indexOfCurrentCardToBeRemoved !== -1) {
                 playingZoneCards[+isKingInPlayingZone[0]].forEach((existingCard, index) => {
                   if (index > indexOfCurrentCardToBeRemoved) {
@@ -398,6 +515,12 @@ export class App {
                   }
                 });
                 playingZoneCards[+isKingInPlayingZone[0]].splice(indexOfCurrentCardToBeRemoved);
+              }
+              if (indexOfCurrentCardToBeRemoved !== -1 && indexOfCurrentCardToBeRemoved !== 0) {
+                const preLastElemenet = playingZoneCards[+isKingInPlayingZone[0]].at(-1);
+                if (preLastElemenet && preLastElemenet.isShownBackCard) {
+                  preLastElemenet.turnCard();
+                }
               }
             }
             return;
@@ -458,45 +581,71 @@ export class App {
                   indexOfCurrentCardToBeRemoved,
                 );
               }
+              if (indexOfCurrentCardToBeRemoved !== -1 && indexOfCurrentCardToBeRemoved !== 0) {
+                const preLastElement = playingZoneCards[+isFoundCardInPlayingZone[0]].at(-1);
+                if (preLastElement && preLastElement.isShownBackCard) {
+                  preLastElement.turnCard();
+                }
+              }
             }
           }
         }
       }
 
       function shuffle() {
-        const fourHeart = cards.find(
-          (card) => card.card.state.suit === 'heart' && card.card.state.rank === '4',
-        );
-        const queenSpade = cards.find(
-          (card) => card.card.state.suit === 'spade' && card.card.state.rank === 'queen',
-        );
-        const kingDiamond = cards.find(
-          (card) => card.card.state.suit === 'diamond' && card.card.state.rank === 'king',
-        );
-        if (fourHeart) {
-          const indexToSet = 5;
-          const x = placeholdersPlayingItems[indexToSet].x + cardWidth / 2;
-          const y = placeholdersPlayingItems[indexToSet].y + cardHeight / 2;
-          playingZoneCards[indexToSet].push(fourHeart);
-          fourHeart.updateCoordinates(x, y);
-          fourHeart.setSpritePosition();
-        }
-        if (queenSpade) {
-          const indexToSet = 3;
-          const x = placeholdersPlayingItems[indexToSet].x + cardWidth / 2;
-          const y = placeholdersPlayingItems[indexToSet].y + cardHeight / 2;
-          playingZoneCards[indexToSet].push(queenSpade);
-          queenSpade.updateCoordinates(x, y);
-          queenSpade.setSpritePosition();
-        }
-        if (kingDiamond) {
-          const indexToSet = 2;
-          const x = placeholdersPlayingItems[indexToSet].x + cardWidth / 2;
-          const y = placeholdersPlayingItems[indexToSet].y + cardHeight / 2;
-          playingZoneCards[indexToSet].push(kingDiamond);
-          kingDiamond.updateCoordinates(x, y);
-          kingDiamond.setSpritePosition();
-        }
+        cards.forEach((card, index, array) => {
+          const randomIndex = Math.floor(Math.random() * array.length);
+          const randomIndexTwo = Math.floor(Math.random() * array.length);
+          if (array[randomIndex] && cards[randomIndexTwo]) {
+            [cards[index], cards[randomIndex]] = [
+              cards[randomIndex],
+              cards[index],
+              cards[randomIndexTwo],
+            ];
+          }
+        });
+        cards.forEach((card) => {
+          Object.entries(playingZoneCards).forEach(([key, value], index, array) => {
+            if (
+              value.length > +key ||
+              Object.values(playingZoneCards).some((existingCards) =>
+                existingCards.some(
+                  (existingCard) => card.card.sprite.uid === existingCard.card.sprite.uid,
+                ),
+              )
+            ) {
+              return;
+            }
+            const x = placeholdersPlayingItems[+key].x + cardWidth / 2;
+            const y =
+              placeholdersPlayingItems[+key].y +
+              cardHeight / 2 +
+              value.length * Y_SHIFT_FOR_PLAYING_CARDS;
+            card.card.sprite.zIndex = (playingZoneCards[index].at(-1)?.card.sprite.zIndex || 0) + 1;
+            playingZoneCards[index].push(card);
+            card.updateCoordinates(x, y);
+            card.setSpritePosition();
+            if (value.length - 1 !== index) {
+              card.turnCard();
+            }
+          });
+        });
+        const playingZoneCardsLength = Object.values(playingZoneCards).reduce((acc, cur) => {
+          return (acc += cur.length);
+        }, 0);
+        cards.forEach((card, index, array) => {
+          if (index < playingZoneCardsLength) {
+            return;
+          }
+          card.card.sprite.zIndex = array.length - index + 1;
+          card.updateCoordinates(
+            placeholdersDeckItems.nonTurned.x + cardWidth / 2,
+            placeholdersDeckItems.nonTurned.y + cardHeight / 2,
+          );
+          card.setSpritePosition();
+          card.turnCard();
+          deck.nonTurned.push(card);
+        });
       }
 
       shuffle();
