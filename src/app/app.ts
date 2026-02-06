@@ -98,6 +98,7 @@ export class App {
       const cardWidth = GAME_CONFIG.cardWidth;
       const cardHeight = GAME_CONFIG.cardHeight;
       const gap = 40;
+      const Y_SHIFT_FOR_PLAYING_CARDS = (cardHeight * 3) / 7;
 
       const cols = GAME_CONFIG.cols;
       const rows = GAME_CONFIG.rows;
@@ -339,7 +340,6 @@ export class App {
                 return value.find((item) => item.card.sprite.uid === card.card.sprite.uid);
               },
             );
-
             if (itemToBeRemovedFromPlayingZone) {
               const indexOfCurrentCard = itemToBeRemovedFromPlayingZone[1].findIndex(
                 (item) => item.card.sprite.uid === card.card.sprite.uid,
@@ -353,6 +353,53 @@ export class App {
             readyCards[suit].push(card);
 
             card.setNewCoordindatesSlowly(x, y);
+            return;
+          }
+
+          const isKingAndCanBeMovedToEmptySpace =
+            card.card.state.rank === 'king' &&
+            Object.entries(playingZoneCards).find(([key, value]) => {
+              return value.length === 0;
+            });
+
+          if (isKingAndCanBeMovedToEmptySpace) {
+            const isKingInPlayingZone = Object.entries(playingZoneCards).find(([key, value]) => {
+              return value.find(
+                (existingCard) =>
+                  card.card.state.rank === existingCard.card.state.rank &&
+                  card.card.state.suit === existingCard.card.state.suit,
+              );
+            });
+
+            let playingZoneCardsIndexToBeSet = +isKingAndCanBeMovedToEmptySpace[0];
+
+            const x = placeholdersPlayingItems[playingZoneCardsIndexToBeSet].x + cardWidth / 2;
+            const y = placeholdersPlayingItems[playingZoneCardsIndexToBeSet].y + cardHeight / 2;
+            const zIndexToSet =
+              (playingZoneCards[playingZoneCardsIndexToBeSet].at(-1)?.card?.sprite?.zIndex || 0) +
+              1;
+            card.setNewCoordindatesSlowly(x, y);
+            card.card.sprite.zIndex = zIndexToSet;
+            playingZoneCards[playingZoneCardsIndexToBeSet].push(card);
+
+            if (isKingInPlayingZone) {
+              const indexOfCurrentCardToBeRemoved = playingZoneCards[
+                +isKingInPlayingZone[0]
+              ].findIndex((existingCard) => existingCard.card.sprite.uid === card.card.sprite.uid);
+              if (indexOfCurrentCardToBeRemoved !== -1) {
+                playingZoneCards[+isKingInPlayingZone[0]].forEach((existingCard, index) => {
+                  if (index > indexOfCurrentCardToBeRemoved) {
+                    existingCard.setNewCoordindatesSlowly(
+                      x,
+                      y + (index - indexOfCurrentCardToBeRemoved) * Y_SHIFT_FOR_PLAYING_CARDS,
+                    );
+                    existingCard.card.sprite.zIndex = zIndexToSet;
+                    playingZoneCards[playingZoneCardsIndexToBeSet].push(existingCard);
+                  }
+                });
+                playingZoneCards[+isKingInPlayingZone[0]].splice(indexOfCurrentCardToBeRemoved);
+              }
+            }
             return;
           }
 
@@ -370,12 +417,48 @@ export class App {
           });
 
           if (foundElement) {
+            const isFoundCardInPlayingZone = Object.entries(playingZoneCards).find(
+              ([key, value]) => {
+                return value.find(
+                  (existingCard) =>
+                    card.card.state.rank === existingCard.card.state.rank &&
+                    card.card.state.suit === existingCard.card.state.suit,
+                );
+              },
+            );
+
             const x = placeholdersPlayingItems[+foundElement[0]].x + cardWidth / 2;
-            const y = placeholdersPlayingItems[+foundElement[0]].y + cardHeight / 2;
+            const y =
+              placeholdersPlayingItems[+foundElement[0]].y +
+              cardHeight / 2 +
+              playingZoneCards[+foundElement[0]].length * Y_SHIFT_FOR_PLAYING_CARDS;
             card.setNewCoordindatesSlowly(x, y);
+
             card.card.sprite.zIndex =
               (playingZoneCards[+foundElement[0]].at(-1)?.card?.sprite?.zIndex || 0) + 1;
             playingZoneCards[+foundElement[0]].push(card);
+
+            if (isFoundCardInPlayingZone) {
+              const indexOfCurrentCardToBeRemoved = playingZoneCards[
+                +isFoundCardInPlayingZone[0]
+              ].findIndex((existingCard) => existingCard.card.sprite.uid === card.card.sprite.uid);
+
+              if (indexOfCurrentCardToBeRemoved !== -1) {
+                playingZoneCards[+isFoundCardInPlayingZone[0]].forEach((existingCard, index) => {
+                  if (index > indexOfCurrentCardToBeRemoved) {
+                    existingCard.setNewCoordindatesSlowly(
+                      x,
+                      y + (index - indexOfCurrentCardToBeRemoved) * Y_SHIFT_FOR_PLAYING_CARDS,
+                    );
+                    existingCard.card.sprite.zIndex = card.card.sprite.zIndex;
+                    playingZoneCards[+foundElement[0]].push(existingCard);
+                  }
+                });
+                playingZoneCards[+isFoundCardInPlayingZone[0]].splice(
+                  indexOfCurrentCardToBeRemoved,
+                );
+              }
+            }
           }
         }
       }
@@ -386,6 +469,9 @@ export class App {
         );
         const queenSpade = cards.find(
           (card) => card.card.state.suit === 'spade' && card.card.state.rank === 'queen',
+        );
+        const kingDiamond = cards.find(
+          (card) => card.card.state.suit === 'diamond' && card.card.state.rank === 'king',
         );
         if (fourHeart) {
           const indexToSet = 5;
@@ -402,6 +488,14 @@ export class App {
           playingZoneCards[indexToSet].push(queenSpade);
           queenSpade.updateCoordinates(x, y);
           queenSpade.setSpritePosition();
+        }
+        if (kingDiamond) {
+          const indexToSet = 2;
+          const x = placeholdersPlayingItems[indexToSet].x + cardWidth / 2;
+          const y = placeholdersPlayingItems[indexToSet].y + cardHeight / 2;
+          playingZoneCards[indexToSet].push(kingDiamond);
+          kingDiamond.updateCoordinates(x, y);
+          kingDiamond.setSpritePosition();
         }
       }
 
