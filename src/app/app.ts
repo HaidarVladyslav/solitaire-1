@@ -170,7 +170,7 @@ export class App {
             cardWidth,
             cardHeight,
             14 * cardWidth,
-            (isRed ? 2 : 3) * cardHeight,
+            1 * cardHeight,
             x,
             y,
           );
@@ -368,6 +368,42 @@ export class App {
             cards.some((readyCard) => readyCard.card.sprite.uid === card.card.sprite.uid),
           )
         ) {
+          const foundElement = Object.entries(playingZoneCards).find(([key, value]) => {
+            if (value.length === 0) {
+              return false;
+            }
+            const lastValue = value.at(-1);
+            return (
+              lastValue &&
+              ((lastValue.card.state.isRed && !card.card.state.isRed) ||
+                (!lastValue.card.state.isRed && card.card.state.isRed)) &&
+              card.card.state.priority === lastValue.card.state.priority - 1
+            );
+          });
+          if (foundElement) {
+            const isInReadyZone = Object.entries(readyCards).find(([key, value]) => {
+              return value.find((readyCard) => readyCard.card.sprite.uid === card.card.sprite.uid);
+            });
+
+            if (isInReadyZone) {
+              const x = placeholdersPlayingItems[+foundElement[0]].x + cardWidth / 2;
+              const y =
+                placeholdersPlayingItems[+foundElement[0]].y +
+                cardHeight / 2 +
+                playingZoneCards[+foundElement[0]].length * Y_SHIFT_FOR_PLAYING_CARDS;
+              card.card.sprite.zIndex =
+                (playingZoneCards[+foundElement[0]].at(-1)?.card?.sprite?.zIndex || 0) + 1;
+              playingZoneCards[+foundElement[0]].push(card);
+              card.setNewCoordindatesSlowly(x, y);
+              const key = isInReadyZone[0] as keyof typeof readyCards;
+              const indexToBeRemovedFromReadyCardsZone = readyCards[key].findIndex(
+                (readyCard) => readyCard.card.sprite.uid === card.card.sprite.uid,
+              );
+              if (indexToBeRemovedFromReadyCardsZone !== -1) {
+                readyCards[key].splice(indexToBeRemovedFromReadyCardsZone, 1);
+              }
+            }
+          }
           return;
         }
 
@@ -380,12 +416,11 @@ export class App {
             return;
           }
           card.turnCard();
-          card.updateCoordinates(
+          card.card.sprite.zIndex = 0;
+          card.setNewCoordindatesSlowly(
             placeholdersDeckItems.turned.x + cardWidth / 2,
             placeholdersDeckItems.turned.y + cardHeight / 2,
           );
-          card.card.sprite.zIndex = 0;
-          card.setSpritePosition();
           const indexInNonTurnedCards = deck.nonTurned.findIndex(
             (nonTurnedCard) => nonTurnedCard.card.sprite.uid === card.card.sprite.uid,
           );
@@ -405,6 +440,14 @@ export class App {
         );
 
         if (rank === 'ace') {
+          if (
+            Object.values(readyCards).some((value) =>
+              value.some((readyCard) => readyCard.card.sprite.uid === card.card.sprite.uid),
+            )
+          ) {
+            return;
+          }
+
           const x = placeholdersReadyItems[suit].x + cardWidth / 2;
           const y = placeholdersReadyItems[suit].y + cardHeight / 2;
           readyCards[suit].push(card);
